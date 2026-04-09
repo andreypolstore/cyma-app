@@ -118,10 +118,10 @@
 
             const tg = window.Telegram?.WebApp;
 
-            // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ ДЛЯ ВАС ---
+            // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ (ОБЯЗАТЕЛЬНО ЗАПОЛНИТЕ) ---
             const ADMIN_CONFIG = {
-                botToken: 'ВАШ_ТОКЕН_БОТА', // Вставьте токен от BotFather
-                adminChatId: 'ВАШ_ID' // Вставьте ваш ID (можно узнать у @userinfobot)
+                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // Сюда вставьте токен от @BotFather
+                adminChatId: '7610266924' // Сюда вставьте ваш ID от @userinfobot
             };
 
             useEffect(() => {
@@ -155,7 +155,7 @@
 `.trim();
 
                 try {
-                    await fetch(`https://api.telegram.org/bot${ADMIN_CONFIG.botToken}/sendMessage`, {
+                    const response = await fetch(`https://api.telegram.org/bot${ADMIN_CONFIG.botToken}/sendMessage`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -164,8 +164,14 @@
                             parse_mode: 'Markdown'
                         })
                     });
+                    
+                    if (!response.ok) {
+                        throw new Error('Ошибка API Telegram');
+                    }
+                    return true;
                 } catch (err) {
-                    console.error("Ошибка отправки уведомления админу:", err);
+                    console.error("Ошибка отправки уведомления:", err);
+                    return false;
                 }
             };
 
@@ -194,7 +200,7 @@
                 tg.showConfirm(`Вы подтверждаете покупку за ${product.stars} Stars?`, async (confirm) => {
                     if (confirm) {
                         setIsProcessing(true);
-                        showNotify("Обработка сигнала...");
+                        showNotify("Отправка данных...");
                         
                         const orderInfo = {
                             product: product.title,
@@ -204,15 +210,21 @@
                             ...form
                         };
 
-                        // 1. Отправляем уведомление вам в Telegram
-                        await sendAdminNotification(orderInfo);
+                        // 1. Пытаемся отправить уведомление
+                        const isSent = await sendAdminNotification(orderInfo);
                         
-                        // 2. Имитируем задержку оплаты
+                        if (!isSent) {
+                            setIsProcessing(false);
+                            tg.showAlert("Ошибка: не удалось отправить уведомление. Проверьте настройки Bot Token и Chat ID в коде!");
+                            return;
+                        }
+
+                        // 2. Имитируем завершение оплаты
                         setTimeout(() => {
                             setIsProcessing(false);
                             setView('success');
                             showNotify("Заказ успешно оформлен!");
-                        }, 2000);
+                        }, 1000);
                     }
                 });
             };
@@ -239,7 +251,7 @@
                 return e('div', { className: 'pt-32 px-6 text-center' },
                     e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
                     e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'Оплачено!'),
-                    e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Транзакция подтверждена. Данные переданы владельцу.'),
+                    e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Данные заказа переданы владельцу. Ожидайте связи.'),
                     e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
                 );
             }
