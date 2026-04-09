@@ -37,7 +37,7 @@
             z-index: -1;
             opacity: 0.12;
             pointer-events: none;
-            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' fill='%2300E5FF'%3E%3Cpath d='M0,300 Q200,100 400,300 T800,300 L800,600 L0,600 Z' /%3E%3C/svg%3E");
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' fill='%2300E5FF'%3E%3Cpath d='M0,300 Q200,100 400,300 T800,150 L800,300 L0,300 Z' /%3E%3C/svg%3E");
             background-size: 50% 100%;
             animation: moveWave 18s linear infinite;
         }
@@ -97,8 +97,8 @@
 
             // --- КОНФИГУРАЦИЯ ---
             const CONFIG = {
-                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // Токен от @BotFather
-                adminChatId: '7610266924'      // ID от @userinfobot
+                botToken: 'ВАШ_ТОКЕН_БОТА', // Токен от @BotFather
+                adminChatId: 'ВАШ_ID'      // ID от @userinfobot
             };
 
             const Icons = {
@@ -161,46 +161,53 @@
                     setLoading(true);
 
                     try {
-                        // 1. Создаем ссылку на оплату
+                        // 1. Создаем ссылку на оплату (1 Stars для теста)
                         const response = await fetch(`https://api.telegram.org/bot${CONFIG.botToken}/createInvoiceLink`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                title: "Apple Pods Pro 2 (Premium)",
-                                description: `Цвет: ${color === 'White' ? 'Белый' : 'Черный'}. ПВЗ: ${form.address}`,
+                                title: "Apple Pods Pro 2 (Test)",
+                                description: `Тестовый платеж. Цвет: ${color === 'White' ? 'Белый' : 'Черный'}`,
                                 payload: `order_${Date.now()}`,
                                 provider_token: "", // Пусто для Telegram Stars
                                 currency: "XTR",
-                                prices: [{ label: "Заказ", amount: 540 }]
+                                prices: [{ label: "Заказ", amount: 1 }]
                             })
                         });
 
                         const data = await response.json();
 
                         if (!data.ok) {
-                            // Если API вернуло ошибку, показываем её пользователю
                             throw new Error(data.description || "API Error");
                         }
 
                         // 2. Открываем нативное окно оплаты Telegram
                         tg.openInvoice(data.result, async (status) => {
                             if (status === 'paid') {
-                                // ТОЛЬКО ПРИ СТАТУСЕ PAID ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ
                                 if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                                await sendNotification({ product: "Apple Pods Pro 2", stars: 540, color, ...form });
+                                await sendNotification({ product: "Apple Pods Pro 2", stars: 1, color, ...form });
                                 setView('success');
                             } else if (status === 'cancelled') {
                                 tg.showPopup({ message: "Оплата отменена. Попробуйте еще раз." });
                             } else {
-                                tg.showAlert(`Статус оплаты: ${status}. Если звезды списаны, свяжитесь с поддержкой.`);
+                                tg.showAlert(`Статус оплаты: ${status}`);
                             }
                             setLoading(false);
                         });
 
                     } catch (err) {
-                        // Показываем ошибку, если запрос не удался (например, CORS или неверный токен)
-                        tg?.showAlert(`Ошибка оплаты: ${err.message}\n\nУбедитесь, что вы запустили своего бота (/start) и Stars активны.`);
+                        tg?.showAlert(`Ошибка оплаты: ${err.message}`);
                         setLoading(false);
+                    }
+                };
+
+                const product = {
+                    title: "Apple Pods Pro 2",
+                    stars: 1, // ТЕСТОВАЯ ЦЕНА
+                    price: "1890 ₽",
+                    images: {
+                        'White': 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?auto=format&fit=crop&w=600&q=80',
+                        'Black': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80'
                     }
                 };
 
@@ -220,14 +227,14 @@
                         e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter mb-8' }, 'CYMA', e('br'), 'STARS'),
                         e('div', { className: 'rounded-[3.5rem] glass p-2 active:scale-95 transition-all shadow-2xl cursor-pointer', onClick: () => setView('product') },
                             e('div', { className: 'h-80 rounded-[3rem] bg-[#f5f5f7] relative overflow-hidden' },
-                                e('img', { src: 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?auto=format&fit=crop&w=600&q=80', className: 'w-full h-full object-contain p-10' }),
+                                e('img', { src: product.images['White'], className: 'w-full h-full object-contain p-10' }),
                                 e('div', { className: 'absolute top-5 right-5 bg-black/80 px-4 py-2 rounded-full flex items-center gap-2 border border-white/10' },
-                                    e(Icons.Star, { f: '#FFD600' }), e('span', { className: 'font-black text-sm text-white' }, '540')
+                                    e(Icons.Star, { f: '#FFD600' }), e('span', { className: 'font-black text-sm text-white' }, product.stars)
                                 )
                             ),
                             e('div', { className: 'p-7' },
-                                e('h3', { className: 'text-2xl font-black italic uppercase' }, 'Apple Pods Pro 2'),
-                                e('p', { className: 'text-[#00E5FF] font-black text-xl mt-1' }, '1890 ₽')
+                                e('h3', { className: 'text-2xl font-black italic uppercase' }, product.title),
+                                e('p', { className: 'text-[#00E5FF] font-black text-xl mt-1' }, product.price)
                             )
                         )
                     );
@@ -240,12 +247,12 @@
                         e('div', { className: 'rounded-[3.5rem] glass overflow-hidden mb-10 shadow-2xl border border-white/10' },
                             e('img', { 
                                 src: color === 'White' 
-                                    ? 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?auto=format&fit=crop&w=600&q=80' 
-                                    : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', 
+                                    ? product.images['White']
+                                    : product.images['Black'], 
                                 className: 'w-full aspect-square object-contain p-12 transition-all duration-500' 
                             })
                         ),
-                        e('h1', { className: 'text-4xl font-black italic uppercase mb-6 leading-none tracking-tighter' }, 'Apple Pods Pro 2'),
+                        e('h1', { className: 'text-4xl font-black italic uppercase mb-6 leading-none tracking-tighter' }, product.title),
                         e('div', { className: 'flex gap-5 mb-10' },
                             ['White', 'Black'].map(c => e('button', {
                                 key: c, onClick: () => { setColor(c); tg?.HapticFeedback?.selectionChanged(); },
@@ -272,7 +279,7 @@
                             className: 'w-full btn-stars py-6 rounded-[2.5rem] uppercase italic flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 transition-all',
                             onClick: handlePayment,
                             disabled: loading
-                        }, loading ? e('div', { className: 'loader' }) : [e(Icons.Star, {f:'#000'}), `Оплатить 540 STARS`])
+                        }, loading ? e('div', { className: 'loader' }) : [e(Icons.Star, {f:'#000'}), `Оплатить ${product.stars} STARS`])
                     );
                 }
 
