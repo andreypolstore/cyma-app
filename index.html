@@ -54,16 +54,36 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        /* Кнопка оплаты Stars */
         .btn-stars {
             background: linear-gradient(135deg, #FFD600 0%, #F59E0B 100%);
             color: #000000;
             font-weight: 900;
             box-shadow: 0 0 25px rgba(251, 191, 36, 0.4);
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-stars:active {
             transform: scale(0.96);
             filter: brightness(0.9);
+        }
+
+        .btn-stars::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+            transform: rotate(45deg);
+            animation: shine 3s infinite;
+        }
+
+        @keyframes shine {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
 
         input, textarea {
@@ -91,20 +111,19 @@
     <div id="root"></div>
 
     <script>
-        // Использование DOMContentLoaded гарантирует отсутствие "черного экрана"
         window.addEventListener('DOMContentLoaded', () => {
             const e = React.createElement;
             const { useState, useEffect } = React;
 
-            // --- ОБЯЗАТЕЛЬНО: ВСТАВЬТЕ СВОИ ДАННЫЕ ---
+            // --- КОНФИГУРАЦИЯ ---
             const CONFIG = {
-                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // Токен от @BotFather
-                adminChatId: '7610266924'      // ID от @userinfobot
+                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // От @BotFather
+                adminChatId: '7610266924'       // От @userinfobot
             };
 
             const Icons = {
                 Zap: () => e('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: '#00E5FF' }, e('path', { d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' })),
-                Star: (p) => e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: p.f || 'currentColor' }, e('path', { d: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' })),
+                Star: (p) => e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: p.f || 'currentColor' }, e('path', { d: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' })),
                 Back: () => e('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 3 }, e('polyline', { points: '15 18 9 12 15 6' })),
                 Check: () => e('svg', { width: 44, height: 44, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 4 }, e('polyline', { points: '20 6 9 17 4 12' }))
             };
@@ -136,9 +155,10 @@
                     }
                 };
 
-                const sendNotification = async (orderInfo) => {
+                // Функция уведомления (вызывается ПОСЛЕ оплаты)
+                const sendAdminNotification = async (orderInfo) => {
                     const message = `
-<b>🌟 НОВЫЙ ЗАКАЗ (ОПЛАЧЕНО STARS) 🌟</b>
+<b>✅ ЗАКАЗ ОПЛАЧЕН (STARS)</b>
 -------------------------
 📦 Товар: ${orderInfo.product}
 🎨 Цвет: ${orderInfo.color === 'White' ? 'Белый' : 'Черный'}
@@ -156,27 +176,33 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ chat_id: CONFIG.adminChatId, text: message, parse_mode: 'HTML' })
                         });
-                    } catch (err) { console.error(err); }
+                    } catch (err) { console.error("Admin notify error:", err); }
                 };
 
                 const handlePayment = async () => {
                     if (!form.name || !form.phone || !form.address) {
-                        tg?.showAlert("Пожалуйста, заполните все данные для доставки");
+                        tg?.showAlert("Пожалуйста, заполните данные для доставки");
+                        return;
+                    }
+
+                    if (CONFIG.botToken.includes('ВАШ_')) {
+                        tg?.showAlert("Ошибка конфигурации: не указан Bot Token в коде.");
                         return;
                     }
 
                     setLoading(true);
 
                     try {
-                        // 1. Создаем Invoice Link через API
+                        // В реальном приложении этот запрос должен идти на ВАШ сервер,
+                        // чтобы не светить токен бота в коде страницы.
                         const response = await fetch(`https://api.telegram.org/bot${CONFIG.botToken}/createInvoiceLink`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 title: product.title,
-                                description: `Цвет: ${color === 'White' ? 'Белый' : 'Черный'}. Доставка СДЭК: ${form.address}`,
+                                description: `Цвет: ${color === 'White' ? 'Белый' : 'Черный'}. СДЭК: ${form.address}`,
                                 payload: `order_${Date.now()}`,
-                                provider_token: "", // Пусто для Telegram Stars
+                                provider_token: "", // Пусто для Stars
                                 currency: "XTR",
                                 prices: [{ label: "Apple Pods Pro 2", amount: product.stars }]
                             })
@@ -185,25 +211,25 @@
                         const data = await response.json();
 
                         if (!data.ok) {
-                            throw new Error(data.description || "Ошибка генерации счета");
+                            throw new Error(data.description || "Ошибка API");
                         }
 
-                        // 2. Открываем нативное окно оплаты
+                        // Открываем нативное окно оплаты Telegram
                         tg.openInvoice(data.result, async (status) => {
                             if (status === 'paid') {
                                 if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                                await sendNotification({ ...product, color, ...form });
+                                await sendAdminNotification({ ...product, color, ...form });
                                 setView('success');
                             } else if (status === 'cancelled') {
-                                tg.showAlert("Оплата была отменена");
+                                tg.showPopup({ message: "Оплата отменена пользователем." });
                             } else {
-                                tg.showAlert("Ошибка при оплате. Попробуйте еще раз.");
+                                tg.showAlert("Ошибка транзакции. Попробуйте позже.");
                             }
                             setLoading(false);
                         });
 
                     } catch (err) {
-                        tg?.showAlert(`Ошибка: ${err.message}. Проверьте токен бота!`);
+                        tg?.showAlert(`Ошибка оплаты: ${err.message}. Проверьте токен бота и запустите его (/start)!`);
                         setLoading(false);
                     }
                 };
@@ -221,7 +247,7 @@
                     return e('div', { className: 'pt-28 px-6 animate-in' },
                         e('div', { className: 'wave-container' }),
                         renderHeader(),
-                        e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter leading-none mb-8' }, 'CYMA', e('br'), 'STARS'),
+                        e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter leading-none mb-8' }, 'Резонанс', e('br'), 'Звука'),
                         e('div', { className: 'rounded-[3.5rem] glass p-2 active:scale-95 transition-all shadow-2xl cursor-pointer', onClick: () => setView('product') },
                             e('div', { className: 'h-80 rounded-[3rem] bg-[#f5f5f7] relative overflow-hidden' },
                                 e('img', { src: product.images['White'], className: 'w-full h-full object-contain p-10' }),
@@ -248,8 +274,8 @@
                         e('div', { className: 'flex gap-5 mb-10' },
                             ['White', 'Black'].map(c => e('button', {
                                 key: c, onClick: () => { setColor(c); tg?.HapticFeedback?.selectionChanged(); },
-                                className: `w-16 h-16 rounded-3xl border-2 transition-all flex items-center justify-center ${color === c ? 'border-[#00E5FF] scale-110 shadow-lg' : 'border-transparent opacity-30'}`
-                            }, e('div', { className: `w-10 h-10 rounded-2xl ${c === 'White' ? 'bg-white' : 'bg-black border border-white/10'}` })))
+                                className: `w-16 h-16 rounded-3xl border-2 transition-all flex items-center justify-center ${color === c ? 'border-[#00E5FF] scale-110 shadow-lg shadow-[#00E5FF]/20' : 'border-transparent opacity-30'}`
+                            }, e('div', { className: `w-10 h-10 rounded-2xl ${c === 'White' ? 'bg-white shadow-inner' : 'bg-black border border-white/10'}` })))
                         ),
                         e('div', { className: 'fixed bottom-0 left-0 w-full p-6 glass border-t border-white/10 z-50' },
                             e('button', { className: 'w-full bg-[#ffffff] text-black py-6 rounded-[2.2rem] font-black uppercase italic shadow-xl active:scale-95 transition-all', onClick: () => setView('checkout') }, 'К оформлению')
