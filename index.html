@@ -95,13 +95,13 @@
             const e = React.createElement;
             const { useState, useEffect } = React;
 
-            // --- КОНФИГУРАЦИЯ (ЗАПОЛНИТЕ СВОИ ДАННЫЕ) ---
+            // --- КОНФИГУРАЦИЯ (ОБЯЗАТЕЛЬНО ПРОВЕРЬТЕ ТОКЕН И ID) ---
             const CONFIG = {
-                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // Замените на токен от @BotFather
-                adminChatId: '7610266924'      // Замените на ваш ID от @userinfobot
+                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', 
+                adminChatId: '7610266924'      
             };
 
-            const TEST_PRICE = 1; // Цена в Stars для теста
+            const TEST_PRICE = 1; // 1 Star для теста
 
             const Icons = {
                 Zap: () => e('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: '#00E5FF' }, e('path', { d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' })),
@@ -136,7 +136,7 @@
                     }
                 };
 
-                const sendNotification = async (orderInfo) => {
+                const sendAdminNotification = async (orderInfo) => {
                     const message = `
 <b>✅ ОПЛАЧЕН НОВЫЙ ЗАКАЗ (STARS)</b>
 -------------------------
@@ -165,53 +165,46 @@
                         return;
                     }
 
-                    if (CONFIG.botToken.includes('ВАШ_')) {
-                        tg?.showAlert("Ошибка: Вы не заменили 'ВАШ_ТОКЕН_БОТА' в коде!");
-                        return;
-                    }
-
                     setLoading(true);
 
                     try {
-                        // ВАЖНО: Прямой запрос к Telegram API из браузера часто блокируется CORS.
-                        // Если окно не открывается, это значит, что Telegram блокирует запрос с токеном бота.
+                        // 1. Формируем ссылку на инвойс
+                        // Используем XTR для Stars и пустой provider_token
                         const response = await fetch(`https://api.telegram.org/bot${CONFIG.botToken}/createInvoiceLink`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 title: product.title,
                                 description: `Цвет: ${color === 'White' ? 'Белый' : 'Черный'}. Доставка: ${form.address}`,
-                                payload: `order_${Date.now()}`,
+                                payload: `id_${Math.floor(Math.random() * 1000000)}`,
                                 provider_token: "", 
                                 currency: "XTR",
-                                prices: [{ label: "Заказ", amount: TEST_PRICE }]
+                                prices: [{ label: "Order", amount: TEST_PRICE }]
                             })
                         });
 
                         const data = await response.json();
 
                         if (!data.ok) {
-                            throw new Error(data.description || "API Error");
+                            throw new Error(data.description || "Ошибка API Telegram");
                         }
 
-                        // Если ссылка получена, открываем нативное окно
+                        // 2. Открываем нативное окно оплаты
                         tg.openInvoice(data.result, async (status) => {
                             if (status === 'paid') {
                                 if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                                await sendNotification({ ...product, color, ...form });
+                                await sendAdminNotification({ ...product, color, ...form });
                                 setView('success');
-                            } else if (status === 'cancelled') {
-                                tg.showPopup({ message: "Оплата отменена." });
                             } else {
-                                tg.showAlert(`Статус оплаты: ${status}`);
+                                // Если статус failed или cancelled — выводим подробности
+                                tg.showAlert(`Статус транзакции: ${status}. Если это "failed", убедитесь, что бот запущен (/start) и Stars активны в BotFather.`);
                             }
                             setLoading(false);
                         });
 
                     } catch (err) {
-                        // Если fetch упал (например, из-за CORS), выводим ошибку
-                        tg?.showAlert(`Ошибка формирования счета: ${err.message}. \n\nПримечание: Telegram блокирует запросы с токеном бота напрямую из браузера по соображениям безопасности (CORS). Для работы платежей Stars вам потребуется простейший бэкенд.`);
-                        console.error("Payment error details:", err);
+                        tg?.showAlert(`Критическая ошибка: ${err.message}. \n\nЧаще всего на Android это вызвано блокировкой прямого запроса к API (CORS).`);
+                        console.error("Payment failure:", err);
                         setLoading(false);
                     }
                 };
@@ -280,15 +273,10 @@
                         ),
                         e('button', { 
                             className: 'w-full btn-stars py-6 rounded-[2.5rem] uppercase italic flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 transition-all',
-                            onClick: handleOrderLogic,
+                            onClick: () => handlePayment(),
                             disabled: loading
                         }, loading ? e('div', { className: 'loader' }) : [e(Icons.Star, {f:'#000'}), `Оплатить ${product.stars} STARS`])
                     );
-                }
-
-                // Вспомогательная функция для запуска процесса оплаты
-                function handleOrderLogic() {
-                    handlePayment();
                 }
 
                 if (view === 'success') {
