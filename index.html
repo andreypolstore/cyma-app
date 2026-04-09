@@ -92,7 +92,7 @@
 
     <script>
         const e = React.createElement;
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect } = React;
 
         const Icons = {
             Zap: () => e('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'currentColor' }, 
@@ -111,17 +111,16 @@
         const App = () => {
             const [view, setView] = useState('catalog');
             const [selectedColor, setSelectedColor] = useState('White');
-            const [delivery, setDelivery] = useState('sdek');
             const [form, setForm] = useState({ name: '', phone: '', address: '' });
             const [isProcessing, setIsProcessing] = useState(false); 
             const [notification, setNotification] = useState(null);
 
             const tg = window.Telegram?.WebApp;
 
-            // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ (ОБЯЗАТЕЛЬНО ЗАПОЛНИТЕ) ---
+            // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ (ЗАПОЛНИТЕ ПРИ РАЗВЕРТЫВАНИИ) ---
             const ADMIN_CONFIG = {
-                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', // Сюда вставьте токен от @BotFather
-                adminChatId: '7610266924' // Сюда вставьте ваш ID от @userinfobot
+                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', 
+                adminChatId: '7610266924' 
             };
 
             useEffect(() => {
@@ -146,7 +145,6 @@
 📦 **Товар:** ${orderData.product}
 🎨 **Цвет:** ${orderData.color}
 💰 **Сумма:** ${orderData.stars} Stars
-🚚 **Доставка:** ${orderData.delivery}
 
 👤 **Клиент:** ${orderData.name}
 📞 **Телефон:** ${orderData.phone}
@@ -164,13 +162,8 @@
                             parse_mode: 'Markdown'
                         })
                     });
-                    
-                    if (!response.ok) {
-                        throw new Error('Ошибка API Telegram');
-                    }
-                    return true;
+                    return response.ok;
                 } catch (err) {
-                    console.error("Ошибка отправки уведомления:", err);
                     return false;
                 }
             };
@@ -191,7 +184,6 @@
                     showNotify("Откройте в Telegram", "error");
                     return;
                 }
-
                 if (!form.name || !form.phone || !form.address) {
                     showNotify("Заполните все поля", "error");
                     return;
@@ -206,20 +198,17 @@
                             product: product.title,
                             color: selectedColor,
                             stars: product.stars,
-                            delivery: delivery,
                             ...form
                         };
 
-                        // 1. Пытаемся отправить уведомление
                         const isSent = await sendAdminNotification(orderInfo);
                         
-                        if (!isSent) {
+                        if (!isSent && ADMIN_CONFIG.botToken !== 'ВАШ_ТОКЕН_БОТА') {
                             setIsProcessing(false);
-                            tg.showAlert("Ошибка: не удалось отправить уведомление. Проверьте настройки Bot Token и Chat ID в коде!");
+                            tg.showAlert("Ошибка отправки. Проверьте Bot Token!");
                             return;
                         }
 
-                        // 2. Имитируем завершение оплаты
                         setTimeout(() => {
                             setIsProcessing(false);
                             setView('success');
@@ -229,6 +218,7 @@
                 });
             };
 
+            // Компоненты UI
             const Header = e('header', { className: 'fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-5 glass' },
                 e('div', { className: 'flex items-center gap-2', onClick: () => setView('catalog') },
                     e('div', { className: 'text-cyan-400' }, e(Icons.Zap)),
@@ -247,66 +237,11 @@
                 )
             ) : null;
 
-            if (view === 'success') {
-                return e('div', { className: 'pt-32 px-6 text-center' },
-                    e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
-                    e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'Оплачено!'),
-                    e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Данные заказа переданы владельцу. Ожидайте связи.'),
-                    e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
-                );
-            }
-
-            if (view === 'checkout') {
-                return e('div', { className: 'pt-28 px-6 pb-10' },
-                    e('h2', { className: 'text-4xl font-black italic uppercase mb-8 text-cyan-400' }, 'Оплата'),
-                    e('div', { className: 'space-y-4 mb-10' },
-                        e('input', { placeholder: 'Имя получателя', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (e) => setForm({...form, name: e.target.value}) }),
-                        e('input', { placeholder: 'Телефон', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (e) => setForm({...form, phone: e.target.value}) }),
-                        e('textarea', { placeholder: 'Адрес СДЭК/Яндекс', className: 'w-full glass rounded-3xl p-5 font-bold h-32', onChange: (e) => setForm({...form, address: e.target.value}) })
-                    ),
-                    e('button', { 
-                        className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50',
-                        onClick: handleStarsPayment,
-                        disabled: isProcessing
-                    }, isProcessing ? e('div', { className: 'loader' }) : [e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`])
-                );
-            }
-
-            if (view === 'product') {
-                return e('div', { className: 'pt-28 px-6 pb-32' },
-                    e('button', { className: 'mb-6 opacity-30 text-[10px] font-black uppercase flex items-center gap-2', onClick: () => setView('catalog') }, e(Icons.Back), 'Назад'),
-                    e('div', { className: 'rounded-[3rem] glass border border-white/10 overflow-hidden mb-8' },
-                        e('img', { src: product.images[selectedColor], className: 'w-full aspect-square object-contain p-10' })
-                    ),
-                    e('h1', { className: 'text-4xl font-black italic uppercase mb-6' }, product.title),
-                    e('div', { className: 'flex gap-4 mb-32' },
-                        product.colors.map(c => e('button', {
-                            key: c, onClick: () => {
-                                setSelectedColor(c);
-                                showNotify(`Выбран цвет: ${c === 'White' ? 'Белый' : 'Черный'}`);
-                            },
-                            className: `w-14 h-14 rounded-2xl border-2 flex items-center justify-center ${selectedColor === c ? 'border-cyan-400 scale-110' : 'border-transparent opacity-30'}`
-                        }, e('div', { className: `w-9 h-9 rounded-xl ${c === 'White' ? 'bg-white' : 'bg-black border border-white/10'}` })))
-                    ),
-                    e('div', { className: 'fixed bottom-0 left-0 w-full p-6 glass border-t border-white/10 z-50' },
-                        e('button', { 
-                            className: 'w-full bg-cyan-400 text-black py-5 rounded-[2rem] font-black uppercase italic shadow-xl active:scale-95 transition-all',
-                            onClick: () => setView('checkout')
-                        }, 'К оплате')
-                    )
-                );
-            }
-
-            return e('div', { className: 'pt-28 px-6 pb-20' },
-                e('div', { className: 'wave-bg' }),
-                Header,
-                Toast,
+            // Контент страниц
+            const CatalogView = e('div', { className: 'px-6 animate-in' },
                 e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter mb-8' }, 'CYMA', e('br'), 'STARS'),
-                e('div', { className: 'rounded-[3rem] glass border border-white/10 p-2 active:scale-95 transition-all', onClick: () => setView('catalog') },
-                    e('div', { className: 'h-80 rounded-[2.5rem] bg-[#f5f5f7] relative', onClick: (ev) => {
-                        ev.stopPropagation();
-                        setView('product');
-                    } },
+                e('div', { className: 'rounded-[3rem] glass border border-white/10 p-2 active:scale-95 transition-all', onClick: () => setView('product') },
+                    e('div', { className: 'h-80 rounded-[2.5rem] bg-[#f5f5f7] relative' },
                         e('img', { src: product.images['White'], className: 'w-full h-full object-contain p-10' }),
                         e('div', { className: 'absolute top-5 right-5 bg-black/80 px-4 py-2 rounded-full flex items-center gap-2' },
                             e(Icons.Star, { fill: '#FFD600' }), e('span', { className: 'font-black text-sm text-white' }, product.stars)
@@ -317,6 +252,58 @@
                         e('p', { className: 'text-cyan-400 font-black mt-1' }, product.price)
                     )
                 )
+            );
+
+            const ProductView = e('div', { className: 'px-6 pb-32 animate-in' },
+                e('button', { className: 'mb-6 opacity-30 text-[10px] font-black uppercase flex items-center gap-2', onClick: () => setView('catalog') }, e(Icons.Back), 'Назад'),
+                e('div', { className: 'rounded-[3rem] glass border border-white/10 overflow-hidden mb-8 shadow-2xl' },
+                    e('img', { src: product.images[selectedColor], className: 'w-full aspect-square object-contain p-10 transition-all duration-500' })
+                ),
+                e('h1', { className: 'text-4xl font-black italic uppercase mb-6' }, product.title),
+                e('div', { className: 'flex gap-4 mb-10' },
+                    ['White', 'Black'].map(c => e('button', {
+                        key: c, onClick: () => { setSelectedColor(c); showNotify(`Цвет: ${c}`); },
+                        className: `w-14 h-14 rounded-2xl border-2 flex items-center justify-center ${selectedColor === c ? 'border-cyan-400 scale-110' : 'border-transparent opacity-30'}`
+                    }, e('div', { className: `w-9 h-9 rounded-xl ${c === 'White' ? 'bg-white' : 'bg-black border border-white/10'}` })))
+                ),
+                e('div', { className: 'fixed bottom-0 left-0 w-full p-6 glass border-t border-white/10 z-50' },
+                    e('button', { 
+                        className: 'w-full bg-cyan-400 text-black py-5 rounded-[2rem] font-black uppercase italic shadow-xl active:scale-95 transition-all',
+                        onClick: () => setView('checkout')
+                    }, 'К оплате')
+                )
+            );
+
+            const CheckoutView = e('div', { className: 'px-6 pb-10 animate-in' },
+                e('h2', { className: 'text-4xl font-black italic uppercase mb-8 text-cyan-400' }, 'Оплата'),
+                e('div', { className: 'space-y-4 mb-10' },
+                    e('input', { placeholder: 'Имя получателя', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, name: ev.target.value}) }),
+                    e('input', { placeholder: 'Телефон', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, phone: ev.target.value}) }),
+                    e('textarea', { placeholder: 'Адрес СДЭК/Яндекс', className: 'w-full glass rounded-3xl p-5 font-bold h-32', onChange: (ev) => setForm({...form, address: ev.target.value}) })
+                ),
+                e('button', { 
+                    className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50',
+                    onClick: handleStarsPayment,
+                    disabled: isProcessing
+                }, isProcessing ? e('div', { className: 'loader' }) : [e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`])
+            );
+
+            const SuccessView = e('div', { className: 'pt-24 px-6 text-center animate-in' },
+                e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
+                e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'Оплачено!'),
+                e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Данные заказа переданы. Ожидайте связи.'),
+                e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
+            );
+
+            // Основной рендеринг
+            return e('div', { className: 'min-h-screen pt-28 pb-10' },
+                e('div', { className: 'wave-bg' }),
+                Header,
+                Toast,
+                view === 'catalog' && CatalogView,
+                view === 'product' && ProductView,
+                view === 'checkout' && CheckoutView,
+                view === 'success' && SuccessView
             );
         };
 
