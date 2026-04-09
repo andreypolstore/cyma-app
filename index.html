@@ -71,6 +71,20 @@
         }
 
         input, textarea { outline: none; }
+        
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -99,10 +113,16 @@
             const [selectedColor, setSelectedColor] = useState('White');
             const [delivery, setDelivery] = useState('sdek');
             const [form, setForm] = useState({ name: '', phone: '', address: '' });
-            const [status, setStatus] = useState(''); 
+            const [isProcessing, setIsProcessing] = useState(false); 
             const [notification, setNotification] = useState(null);
 
             const tg = window.Telegram?.WebApp;
+
+            // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ ДЛЯ ВАС ---
+            const ADMIN_CONFIG = {
+                botToken: 'ВАШ_ТОКЕН_БОТА', // Вставьте токен от BotFather
+                adminChatId: 'ВАШ_ID' // Вставьте ваш ID (можно узнать у @userinfobot)
+            };
 
             useEffect(() => {
                 if (tg) {
@@ -117,6 +137,36 @@
                 setNotification({ text, type });
                 if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred(type === 'error' ? 'error' : 'success');
                 setTimeout(() => setNotification(null), 3000);
+            };
+
+            const sendAdminNotification = async (orderData) => {
+                const message = `
+🌟 **НОВЫЙ ЗАКАЗ CYMA** 🌟
+-------------------------
+📦 **Товар:** ${orderData.product}
+🎨 **Цвет:** ${orderData.color}
+💰 **Сумма:** ${orderData.stars} Stars
+🚚 **Доставка:** ${orderData.delivery}
+
+👤 **Клиент:** ${orderData.name}
+📞 **Телефон:** ${orderData.phone}
+📍 **Адрес:** ${orderData.address}
+-------------------------
+`.trim();
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${ADMIN_CONFIG.botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: ADMIN_CONFIG.adminChatId,
+                            text: message,
+                            parse_mode: 'Markdown'
+                        })
+                    });
+                } catch (err) {
+                    console.error("Ошибка отправки уведомления админу:", err);
+                }
             };
 
             const product = {
@@ -136,15 +186,32 @@
                     return;
                 }
 
-                tg.showConfirm(`Вы подтверждаете покупку за ${product.stars} Stars?`, (confirm) => {
+                if (!form.name || !form.phone || !form.address) {
+                    showNotify("Заполните все поля", "error");
+                    return;
+                }
+
+                tg.showConfirm(`Вы подтверждаете покупку за ${product.stars} Stars?`, async (confirm) => {
                     if (confirm) {
+                        setIsProcessing(true);
                         showNotify("Обработка сигнала...");
-                        setStatus('processing');
                         
+                        const orderInfo = {
+                            product: product.title,
+                            color: selectedColor,
+                            stars: product.stars,
+                            delivery: delivery,
+                            ...form
+                        };
+
+                        // 1. Отправляем уведомление вам в Telegram
+                        await sendAdminNotification(orderInfo);
+                        
+                        // 2. Имитируем задержку оплаты
                         setTimeout(() => {
-                            setStatus('paid');
+                            setIsProcessing(false);
                             setView('success');
-                            showNotify("Оплата прошла успешно!");
+                            showNotify("Заказ успешно оформлен!");
                         }, 2000);
                     }
                 });
@@ -161,7 +228,6 @@
                 )
             );
 
-            // Компонент уведомления
             const Toast = notification ? e('div', { className: 'fixed top-24 left-6 right-6 z-[60] notification-enter' },
                 e('div', { className: `glass p-4 rounded-2xl flex items-center gap-3 border-l-4 ${notification.type === 'error' ? 'border-red-500' : 'border-cyan-500'}` },
                     e('div', { className: notification.type === 'error' ? 'text-red-500' : 'text-cyan-500' }, e(Icons.Bell)),
@@ -173,7 +239,7 @@
                 return e('div', { className: 'pt-32 px-6 text-center' },
                     e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
                     e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'Оплачено!'),
-                    e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Транзакция в блоке Stars подтверждена.'),
+                    e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Транзакция подтверждена. Данные переданы владельцу.'),
                     e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
                 );
             }
@@ -182,13 +248,15 @@
                 return e('div', { className: 'pt-28 px-6 pb-10' },
                     e('h2', { className: 'text-4xl font-black italic uppercase mb-8 text-cyan-400' }, 'Оплата'),
                     e('div', { className: 'space-y-4 mb-10' },
-                        e('input', { placeholder: 'Имя', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (e) => setForm({...form, name: e.target.value}) }),
+                        e('input', { placeholder: 'Имя получателя', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (e) => setForm({...form, name: e.target.value}) }),
+                        e('input', { placeholder: 'Телефон', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (e) => setForm({...form, phone: e.target.value}) }),
                         e('textarea', { placeholder: 'Адрес СДЭК/Яндекс', className: 'w-full glass rounded-3xl p-5 font-bold h-32', onChange: (e) => setForm({...form, address: e.target.value}) })
                     ),
                     e('button', { 
-                        className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all',
-                        onClick: handleStarsPayment
-                    }, e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`)
+                        className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50',
+                        onClick: handleStarsPayment,
+                        disabled: isProcessing
+                    }, isProcessing ? e('div', { className: 'loader' }) : [e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`])
                 );
             }
 
