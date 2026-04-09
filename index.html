@@ -70,7 +70,15 @@
             to { transform: translateY(0); opacity: 1; }
         }
 
-        input, textarea { outline: none; }
+        input, textarea { 
+            outline: none; 
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        input:focus, textarea:focus {
+            border-color: #00E5FF;
+        }
         
         .loader {
             border: 3px solid rgba(255, 255, 255, 0.3);
@@ -111,6 +119,7 @@
         const App = () => {
             const [view, setView] = useState('catalog');
             const [selectedColor, setSelectedColor] = useState('White');
+            const [delivery, setDelivery] = useState('sdek');
             const [form, setForm] = useState({ name: '', phone: '', address: '' });
             const [isProcessing, setIsProcessing] = useState(false); 
             const [notification, setNotification] = useState(null);
@@ -119,16 +128,20 @@
 
             // --- НАСТРОЙКИ УВЕДОМЛЕНИЙ (ЗАПОЛНИТЕ ПРИ РАЗВЕРТЫВАНИИ) ---
             const ADMIN_CONFIG = {
-                botToken: '8731799980:AAGU2TTeY7EE1-AxE56hH5Psdpk2miugltI', 
-                adminChatId: '7610266924' 
+                botToken: 'ВАШ_ТОКЕН_БОТА', 
+                adminChatId: 'ВАШ_ID' 
             };
 
             useEffect(() => {
                 if (tg) {
-                    tg.ready();
-                    tg.expand();
-                    tg.headerColor = '#000000';
-                    tg.backgroundColor = '#000000';
+                    try {
+                        tg.ready();
+                        tg.expand();
+                        if (tg.setHeaderColor) tg.setHeaderColor('#000000');
+                        if (tg.setBackgroundColor) tg.setBackgroundColor('#000000');
+                    } catch (err) {
+                        console.error("TG SDK Init error:", err);
+                    }
                 }
             }, []);
 
@@ -139,12 +152,15 @@
             };
 
             const sendAdminNotification = async (orderData) => {
+                if (ADMIN_CONFIG.botToken === 'ВАШ_ТОКЕН_БОТА') return false;
+
                 const message = `
 🌟 **НОВЫЙ ЗАКАЗ CYMA** 🌟
 -------------------------
 📦 **Товар:** ${orderData.product}
 🎨 **Цвет:** ${orderData.color}
 💰 **Сумма:** ${orderData.stars} Stars
+🚚 **Сервис:** ${orderData.delivery.toUpperCase()}
 
 👤 **Клиент:** ${orderData.name}
 📞 **Телефон:** ${orderData.phone}
@@ -198,6 +214,7 @@
                             product: product.title,
                             color: selectedColor,
                             stars: product.stars,
+                            delivery: delivery,
                             ...form
                         };
 
@@ -218,8 +235,8 @@
                 });
             };
 
-            // Компоненты UI
-            const Header = e('header', { className: 'fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-5 glass' },
+            // Рендеринг хедера
+            const renderHeader = () => e('header', { className: 'fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-5 glass' },
                 e('div', { className: 'flex items-center gap-2', onClick: () => setView('catalog') },
                     e('div', { className: 'text-cyan-400' }, e(Icons.Zap)),
                     e('span', { className: 'text-2xl font-black italic tracking-tighter' }, 'CYMA')
@@ -230,80 +247,105 @@
                 )
             );
 
-            const Toast = notification ? e('div', { className: 'fixed top-24 left-6 right-6 z-[60] notification-enter' },
+            // Рендеринг уведомления
+            const renderToast = () => notification ? e('div', { className: 'fixed top-24 left-6 right-6 z-[60] notification-enter' },
                 e('div', { className: `glass p-4 rounded-2xl flex items-center gap-3 border-l-4 ${notification.type === 'error' ? 'border-red-500' : 'border-cyan-500'}` },
                     e('div', { className: notification.type === 'error' ? 'text-red-500' : 'text-cyan-500' }, e(Icons.Bell)),
                     e('span', { className: 'text-sm font-bold' }, notification.text)
                 )
             ) : null;
 
-            // Контент страниц
-            const CatalogView = e('div', { className: 'px-6 animate-in' },
-                e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter mb-8' }, 'CYMA', e('br'), 'STARS'),
-                e('div', { className: 'rounded-[3rem] glass border border-white/10 p-2 active:scale-95 transition-all', onClick: () => setView('product') },
-                    e('div', { className: 'h-80 rounded-[2.5rem] bg-[#f5f5f7] relative' },
-                        e('img', { src: product.images['White'], className: 'w-full h-full object-contain p-10' }),
-                        e('div', { className: 'absolute top-5 right-5 bg-black/80 px-4 py-2 rounded-full flex items-center gap-2' },
-                            e(Icons.Star, { fill: '#FFD600' }), e('span', { className: 'font-black text-sm text-white' }, product.stars)
-                        )
-                    ),
-                    e('div', { className: 'p-6' },
-                        e('h3', { className: 'text-2xl font-black italic' }, product.title),
-                        e('p', { className: 'text-cyan-400 font-black mt-1' }, product.price)
-                    )
-                )
-            );
+            // Рендеринг страниц
+            const renderView = () => {
+                switch (view) {
+                    case 'catalog':
+                        return e('div', { className: 'px-6 animate-in' },
+                            e('h2', { className: 'text-5xl font-black italic uppercase tracking-tighter mb-8' }, 'CYMA', e('br'), 'STARS'),
+                            e('div', { className: 'rounded-[3rem] glass border border-white/10 p-2 active:scale-95 transition-all', onClick: () => setView('product') },
+                                e('div', { className: 'h-80 rounded-[2.5rem] bg-[#f5f5f7] relative' },
+                                    e('img', { src: product.images['White'], className: 'w-full h-full object-contain p-10' }),
+                                    e('div', { className: 'absolute top-5 right-5 bg-black/80 px-4 py-2 rounded-full flex items-center gap-2' },
+                                        e(Icons.Star, { fill: '#FFD600' }), e('span', { className: 'font-black text-sm text-white' }, product.stars)
+                                    )
+                                ),
+                                e('div', { className: 'p-6' },
+                                    e('h3', { className: 'text-2xl font-black italic' }, product.title),
+                                    e('p', { className: 'text-cyan-400 font-black mt-1' }, product.price)
+                                )
+                            )
+                        );
 
-            const ProductView = e('div', { className: 'px-6 pb-32 animate-in' },
-                e('button', { className: 'mb-6 opacity-30 text-[10px] font-black uppercase flex items-center gap-2', onClick: () => setView('catalog') }, e(Icons.Back), 'Назад'),
-                e('div', { className: 'rounded-[3rem] glass border border-white/10 overflow-hidden mb-8 shadow-2xl' },
-                    e('img', { src: product.images[selectedColor], className: 'w-full aspect-square object-contain p-10 transition-all duration-500' })
-                ),
-                e('h1', { className: 'text-4xl font-black italic uppercase mb-6' }, product.title),
-                e('div', { className: 'flex gap-4 mb-10' },
-                    ['White', 'Black'].map(c => e('button', {
-                        key: c, onClick: () => { setSelectedColor(c); showNotify(`Цвет: ${c}`); },
-                        className: `w-14 h-14 rounded-2xl border-2 flex items-center justify-center ${selectedColor === c ? 'border-cyan-400 scale-110' : 'border-transparent opacity-30'}`
-                    }, e('div', { className: `w-9 h-9 rounded-xl ${c === 'White' ? 'bg-white' : 'bg-black border border-white/10'}` })))
-                ),
-                e('div', { className: 'fixed bottom-0 left-0 w-full p-6 glass border-t border-white/10 z-50' },
-                    e('button', { 
-                        className: 'w-full bg-cyan-400 text-black py-5 rounded-[2rem] font-black uppercase italic shadow-xl active:scale-95 transition-all',
-                        onClick: () => setView('checkout')
-                    }, 'К оплате')
-                )
-            );
+                    case 'product':
+                        return e('div', { className: 'px-6 pb-32 animate-in' },
+                            e('button', { className: 'mb-6 opacity-30 text-[10px] font-black uppercase flex items-center gap-2', onClick: () => setView('catalog') }, e(Icons.Back), 'Назад'),
+                            e('div', { className: 'rounded-[3rem] glass border border-white/10 overflow-hidden mb-8 shadow-2xl' },
+                                e('img', { src: product.images[selectedColor], className: 'w-full aspect-square object-contain p-10 transition-all duration-500' })
+                            ),
+                            e('h1', { className: 'text-4xl font-black italic uppercase mb-6' }, product.title),
+                            e('div', { className: 'flex gap-4 mb-10' },
+                                ['White', 'Black'].map(c => e('button', {
+                                    key: c, onClick: () => { setSelectedColor(c); showNotify(`Цвет: ${c}`); },
+                                    className: `w-14 h-14 rounded-2xl border-2 flex items-center justify-center ${selectedColor === c ? 'border-cyan-400 scale-110' : 'border-transparent opacity-30'}`
+                                }, e('div', { className: `w-9 h-9 rounded-xl ${c === 'White' ? 'bg-white' : 'bg-black border border-white/10'}` })))
+                            ),
+                            e('div', { className: 'fixed bottom-0 left-0 w-full p-6 glass border-t border-white/10 z-50' },
+                                e('button', { 
+                                    className: 'w-full bg-cyan-400 text-black py-5 rounded-[2rem] font-black uppercase italic shadow-xl active:scale-95 transition-all',
+                                    onClick: () => setView('checkout')
+                                }, 'К оформлению')
+                            )
+                        );
 
-            const CheckoutView = e('div', { className: 'px-6 pb-10 animate-in' },
-                e('h2', { className: 'text-4xl font-black italic uppercase mb-8 text-cyan-400' }, 'Оплата'),
-                e('div', { className: 'space-y-4 mb-10' },
-                    e('input', { placeholder: 'Имя получателя', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, name: ev.target.value}) }),
-                    e('input', { placeholder: 'Телефон', className: 'w-full glass rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, phone: ev.target.value}) }),
-                    e('textarea', { placeholder: 'Адрес СДЭК/Яндекс', className: 'w-full glass rounded-3xl p-5 font-bold h-32', onChange: (ev) => setForm({...form, address: ev.target.value}) })
-                ),
-                e('button', { 
-                    className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50',
-                    onClick: handleStarsPayment,
-                    disabled: isProcessing
-                }, isProcessing ? e('div', { className: 'loader' }) : [e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`])
-            );
+                    case 'checkout':
+                        return e('div', { className: 'px-6 pb-10 animate-in' },
+                            e('h2', { className: 'text-4xl font-black italic uppercase mb-8 text-cyan-400' }, 'Оплата'),
+                            
+                            e('div', { className: 'grid grid-cols-2 gap-3 mb-8' },
+                                [
+                                    {id: 'sdek', name: 'СДЭК', c: 'bg-green-500'},
+                                    {id: 'yandex', name: 'Яндекс', c: 'bg-yellow-500'},
+                                    {id: 'wb', name: 'WB Пункт', c: 'bg-purple-600'},
+                                    {id: 'avito', name: 'Авито', c: 'bg-blue-600'}
+                                ].map(opt => e('button', {
+                                    key: opt.id,
+                                    onClick: () => setDelivery(opt.id),
+                                    className: `p-4 rounded-2xl border-2 text-left flex flex-col gap-2 transition-all ${delivery === opt.id ? 'border-cyan-400 bg-cyan-400/10 opacity-100' : 'border-white/5 glass opacity-40'}`
+                                }, 
+                                    e('div', { className: `w-2 h-2 rounded-full ${opt.c}` }),
+                                    e('span', { className: 'text-[10px] font-black uppercase' }, opt.name)
+                                ))
+                            ),
 
-            const SuccessView = e('div', { className: 'pt-24 px-6 text-center animate-in' },
-                e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
-                e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'Оплачено!'),
-                e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Данные заказа переданы. Ожидайте связи.'),
-                e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
-            );
+                            e('div', { className: 'space-y-4 mb-10' },
+                                e('input', { placeholder: 'Имя получателя', className: 'w-full rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, name: ev.target.value}) }),
+                                e('input', { placeholder: 'Телефон', className: 'w-full rounded-3xl p-5 font-bold', onChange: (ev) => setForm({...form, phone: ev.target.value}) }),
+                                e('textarea', { placeholder: 'Адрес ПВЗ или Город', className: 'w-full rounded-3xl p-5 font-bold h-32', onChange: (ev) => setForm({...form, address: ev.target.value}) })
+                            ),
+                            e('button', { 
+                                className: 'w-full btn-stars py-6 rounded-[2.5rem] font-black uppercase italic shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50',
+                                onClick: handleStarsPayment,
+                                disabled: isProcessing
+                            }, isProcessing ? e('div', { className: 'loader' }) : [e(Icons.Star, { fill: '#000' }), `Оплатить ${product.stars} STARS`])
+                        );
 
-            // Основной рендеринг
+                    case 'success':
+                        return e('div', { className: 'pt-24 px-6 text-center animate-in' },
+                            e('div', { className: 'w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg' }, e(Icons.Check)),
+                            e('h2', { className: 'text-5xl font-black italic uppercase mb-4 tracking-tighter' }, 'В эфире!'),
+                            e('p', { className: 'opacity-50 text-xs font-bold uppercase mb-10 tracking-widest' }, 'Данные заказа переданы. Ожидайте связи.'),
+                            e('button', { className: 'w-full glass border border-white/10 py-5 rounded-3xl font-black uppercase text-xs', onClick: () => setView('catalog') }, 'В магазин')
+                        );
+
+                    default:
+                        return null;
+                }
+            };
+
             return e('div', { className: 'min-h-screen pt-28 pb-10' },
                 e('div', { className: 'wave-bg' }),
-                Header,
-                Toast,
-                view === 'catalog' && CatalogView,
-                view === 'product' && ProductView,
-                view === 'checkout' && CheckoutView,
-                view === 'success' && SuccessView
+                renderHeader(),
+                renderToast(),
+                renderView()
             );
         };
 
