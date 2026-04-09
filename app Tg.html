@@ -1,0 +1,373 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CYMA Store</title>
+    <!-- Подключаем Telegram SDK -->
+    <script src="[https://telegram.org/js/telegram-web-app.js](https://telegram.org/js/telegram-web-app.js)"></script>
+    <!-- Подключаем Tailwind для стилей -->
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <!-- Подключаем React -->
+    <script src="[https://unpkg.com/react@18/umd/react.production.min.js](https://unpkg.com/react@18/umd/react.production.min.js)"></script>
+    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.production.min.js](https://unpkg.com/react-dom@18/umd/react-dom.production.min.js)"></script>
+    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+```react
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Zap, Headphones, Star, ChevronLeft, 
+  ShoppingBag, Truck, ShieldCheck, MapPin, 
+  Smartphone, CheckCircle, Moon, Sun, Monitor, 
+  Activity, Radio, ArrowRight, Box, Package, AlertCircle
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+// --- Конфигурация Firebase ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'cyma-res-2026';
+
+// --- Компонент Анимированной Волны ---
+const SoundWaveIndicator = ({ active }) => (
+  <div className="flex items-end gap-[3px] h-6">
+    {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div 
+        key={i} 
+        className={`w-[3px] rounded-full bg-cyan-500 transition-all duration-300 ${active ? 'animate-bounce' : 'h-1'}`}
+        style={{ 
+          height: active ? `${20 + Math.random() * 80}%` : '4px',
+          animationDuration: `${0.6 + Math.random()}s`,
+          animationDelay: `${i * 0.1}s`
+        }}
+      />
+    ))}
+  </div>
+);
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [theme, setTheme] = useState('dark'); 
+  const [view, setView] = useState('catalog'); 
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedColor, setSelectedColor] = useState('White');
+  const [deliveryMethod, setDeliveryMethod] = useState('sdek');
+  const [form, setForm] = useState({ name: '', phone: '', address: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Инициализация Telegram WebApp
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.enableClosingConfirmation();
+    }
+  }, []);
+
+  // Firebase Auth (Rule 3)
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.error("Auth Error", e);
+        setError("Ошибка подключения к серверу");
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  const products = [
+    {
+      id: 'pods-pro-2-premium',
+      title: 'Apple Pods Pro 2',
+      stars: 540,
+      price: '1890 ₽',
+      chip: 'Arioha JL Resonance',
+      colors: ['White', 'Black'],
+      images: {
+        'White': 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?auto=format&fit=crop&w=600&q=80',
+        'Black': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80'
+      },
+      specs: ['Resonance ANC (35dB)', 'Haptic Wave Response', '3 Serial Numbers', 'MagSafe Case'],
+      description: 'Чистый резонанс звука. Технология JL 2026 обеспечивает идеальную передачу частот. Полная поддержка iOS 2026.'
+    }
+  ];
+
+  const deliveryOptions = [
+    { id: 'sdek', name: 'СДЭК', color: 'bg-green-500' },
+    { id: 'yandex', name: 'Яндекс', color: 'bg-yellow-500' },
+    { id: 'wb', name: 'WB Пункт', color: 'bg-purple-600' },
+    { id: 'avito', name: 'Авито', color: 'bg-emerald-500' }
+  ];
+
+  const handleOrder = async () => {
+    if (!user || isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    
+    const tg = window.Telegram?.WebApp;
+    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+
+    try {
+      // Запись в Firestore (Rule 1)
+      const orderRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+      await addDoc(orderRef, {
+        uid: user.uid,
+        product: selectedProduct.title,
+        color: selectedColor,
+        stars: selectedProduct.stars,
+        delivery: deliveryMethod,
+        customer: form,
+        status: 'pending_payment',
+        createdAt: serverTimestamp()
+      });
+
+      // Логика оплаты Stars (для 2026 года)
+      if (tg) {
+        // В реальном сценарии URL инвойса генерируется на бэкенде
+        // tg.openInvoice(invoice_url, (status) => { ... });
+        setView('success');
+      } else {
+        setView('success');
+      }
+    } catch (e) {
+      setError("Не удалось сохранить заказ. Повторите попытку.");
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const ui = {
+    bg: theme === 'dark' ? 'bg-[#080808]' : 'bg-[#F2F2F7]',
+    text: theme === 'dark' ? 'text-white' : 'text-[#1C1C1E]',
+    card: theme === 'dark' ? 'bg-[#151515] border-white/5' : 'bg-white border-black/5',
+    accent: 'text-cyan-500',
+    btn: 'bg-cyan-500 text-black font-black',
+    input: theme === 'dark' ? 'bg-[#1C1C1E] border-white/10' : 'bg-white border-black/10'
+  };
+
+  return (
+    <div className={`min-h-screen ${ui.bg} ${ui.text} font-sans transition-all duration-500 pb-24 selection:bg-cyan-500/30`}>
+      
+      {/* Background Decorative Waves */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-full animate-pulse bg-[radial-gradient(circle_at_50%_50%,#00e5ff_0%,transparent_50%)]"></div>
+      </div>
+
+      {/* Header */}
+      <header className={`fixed top-0 w-full z-50 backdrop-blur-2xl border-b ${ui.card} px-6 py-5 flex justify-between items-center`}>
+        <div className="flex items-center gap-3" onClick={() => setView('catalog')}>
+          <div className="relative">
+            <Activity size={24} className="text-cyan-500 animate-pulse" />
+          </div>
+          <span className="text-2xl font-black tracking-tighter uppercase italic">CYMA</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-2 rounded-xl ${ui.card} border transition-all active:scale-90`}>
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <div className={`px-4 py-1.5 rounded-xl border ${ui.card} flex items-center gap-2 shadow-lg shadow-black/20`}>
+            <Star size={16} className="text-yellow-500 fill-yellow-500" />
+            <span className="text-xs font-black">STARS</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="pt-28 px-6 max-w-md mx-auto relative z-10">
+        
+        {/* CATALOG VIEW */}
+        {view === 'catalog' && (
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="mb-10 flex justify-between items-end">
+              <div>
+                <h2 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">Киматика <br/>Звука</h2>
+                <p className="opacity-40 text-[10px] font-bold uppercase tracking-[0.3em]">Resonance Level: 100%</p>
+              </div>
+              <SoundWaveIndicator active={true} />
+            </div>
+
+            <div className="grid grid-cols-1 gap-8">
+              {products.map(p => (
+                <div key={p.id} onClick={() => { setSelectedProduct(p); setView('product'); }} className={`${ui.card} rounded-[2.5rem] border p-2 transition-all active:scale-[0.97] group`}>
+                  <div className="h-72 rounded-[2.2rem] bg-[#F2F2F2] overflow-hidden relative">
+                    <img src={p.images['White']} className="w-full h-full object-contain p-8 group-hover:scale-105 transition-transform duration-700" alt={p.title} />
+                    <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 border border-white/10">
+                        <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                        <span className="font-bold text-white text-sm">{p.stars}</span>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter">{p.title}</h3>
+                    <div className="flex justify-between items-center mt-4">
+                        <span className="font-black text-cyan-500">{p.price}</span>
+                        <div className="bg-white/5 px-3 py-1 rounded-full text-[9px] font-bold opacity-30 border border-white/5 uppercase">JL Resonance</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PRODUCT PAGE */}
+        {view === 'product' && selectedProduct && (
+          <div className="animate-in fade-in duration-500">
+            <button onClick={() => setView('catalog')} className="mb-8 opacity-30 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                <ChevronLeft size={16} /> К списку частот
+            </button>
+            <div className={`${ui.card} rounded-[3rem] border overflow-hidden mb-8 shadow-2xl`}>
+                <img src={selectedProduct.images[selectedColor]} className="w-full aspect-square object-contain p-12" alt={selectedProduct.title} />
+            </div>
+            <h1 className="text-4xl font-black uppercase italic tracking-tighter mb-4">{selectedProduct.title}</h1>
+            
+            <div className="flex gap-4 mb-10">
+                {selectedProduct.colors.map(c => (
+                    <button 
+                      key={c} 
+                      onClick={() => {
+                        setSelectedColor(c);
+                        window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
+                      }} 
+                      className={`w-14 h-14 rounded-2xl border-2 transition-all flex items-center justify-center ${selectedColor === c ? 'border-cyan-500 scale-110 shadow-lg shadow-cyan-500/20' : 'border-transparent opacity-30'}`}
+                    >
+                        <div className={`w-9 h-9 rounded-xl ${c === 'White' ? 'bg-white shadow-inner' : 'bg-black border border-white/10 shadow-xl'}`}></div>
+                    </button>
+                ))}
+            </div>
+
+            <div className="space-y-4 mb-32">
+                {selectedProduct.specs.map(s => (
+                    <div key={s} className="flex items-center gap-4 text-xs font-bold uppercase tracking-tight opacity-60">
+                        <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_8px_#00e5ff]"></div>
+                        {s}
+                    </div>
+                ))}
+            </div>
+
+            <div className={`fixed bottom-0 left-0 w-full p-6 ${ui.bg} border-t ${ui.card} z-50 backdrop-blur-xl bg-opacity-90`}>
+                <button 
+                  onClick={() => setView('checkout')} 
+                  className={`w-full ${ui.btn} py-5 rounded-[1.8rem] uppercase italic tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-cyan-500/10 active:scale-95 transition-all`}
+                >
+                    Захватить волну ({selectedProduct.stars} ⭐)
+                </button>
+            </div>
+          </div>
+        )}
+
+        {/* CHECKOUT VIEW */}
+        {view === 'checkout' && (
+          <div className="animate-in slide-in-from-right duration-500">
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-8 leading-none text-cyan-500">Доставка</h2>
+            
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              {deliveryOptions.map(opt => (
+                <button 
+                  key={opt.id}
+                  onClick={() => {
+                    setDeliveryMethod(opt.id);
+                    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+                  }}
+                  className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${deliveryMethod === opt.id ? 'border-cyan-500 bg-cyan-500/10' : 'border-white/5 bg-zinc-900/40 opacity-40'}`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${opt.color}`}></div>
+                  <span className="text-[10px] font-black uppercase tracking-tight">{opt.name}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-4 mb-10">
+                <input 
+                  placeholder="Имя получателя" 
+                  className={`w-full ${ui.input} border rounded-2xl p-5 text-sm font-bold outline-none focus:border-cyan-500 transition-colors`} 
+                  onChange={e => setForm({...form, name: e.target.value})} 
+                />
+                <input 
+                  placeholder="Телефон (Связь)" 
+                  className={`w-full ${ui.input} border rounded-2xl p-5 text-sm font-bold outline-none focus:border-cyan-500 transition-colors`} 
+                  onChange={e => setForm({...form, phone: e.target.value})} 
+                />
+                <textarea 
+                  placeholder="Город и адрес ПВЗ" 
+                  className={`w-full ${ui.input} border rounded-2xl p-5 text-sm font-bold outline-none min-h-[120px] focus:border-cyan-500 transition-colors`} 
+                  onChange={e => setForm({...form, address: e.target.value})} 
+                />
+            </div>
+
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-xs font-bold uppercase">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
+
+            <button 
+              onClick={handleOrder} 
+              disabled={!form.name || !form.phone || !form.address || isSubmitting} 
+              className="w-full bg-white text-black py-5 rounded-[1.8rem] font-black uppercase italic tracking-widest shadow-2xl disabled:opacity-20 transition-all flex items-center justify-center"
+            >
+              {isSubmitting ? "Трансляция..." : `Оплатить ${selectedProduct.stars} ⭐`}
+            </button>
+          </div>
+        )}
+
+        {/* SUCCESS VIEW */}
+        {view === 'success' && (
+          <div className="text-center py-20 animate-in zoom-in duration-500">
+            <div className="w-24 h-24 bg-cyan-500 rounded-full flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-cyan-500/20 border-4 border-black">
+                <CheckCircle size={48} className="text-black" />
+            </div>
+            <h2 className="text-4xl font-black uppercase italic mb-6 tracking-tighter">Резонанс 100%</h2>
+            <p className="opacity-40 text-xs font-bold uppercase tracking-widest mb-12 px-10 leading-relaxed">
+                Заказ в системе. Мы отправим трек-номер выбранного сервиса в Telegram.
+            </p>
+            <button 
+              onClick={() => setView('catalog')} 
+              className={`w-full ${ui.card} border py-5 rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] active:scale-95 transition-all`}
+            >
+                В эфир
+            </button>
+          </div>
+        )}
+
+      </main>
+
+      {/* Modern Navigation */}
+      {view === 'catalog' && (
+        <nav className={`fixed bottom-8 left-1/2 -translate-x-1/2 w-[85%] max-w-xs ${ui.card} ${ui.glass} border rounded-[2.5rem] p-2 flex justify-around items-center z-50 shadow-2xl`}>
+          <button className="w-14 h-14 rounded-[2rem] bg-cyan-500 text-black flex items-center justify-center shadow-lg shadow-cyan-500/30"><Monitor size={24} /></button>
+          <button className="w-14 h-14 rounded-[2rem] opacity-20 flex items-center justify-center"><Truck size={24} /></button>
+          <button className="w-14 h-14 rounded-[2rem] opacity-20 flex items-center justify-center text-white"><Package size={24} /></button>
+        </nav>
+      )}
+
+    </div>
+  );
+};
+
+export default App;
+
+```
+    </script>
+</body>
+</html>
